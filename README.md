@@ -1,4 +1,4 @@
-# BREAKLINE POOL — Physics Lab 0.1
+# BREAKLINE POOL — Physics Lab 0.2
 
 Technický 3D prototyp biliardu pre projekt CSP Gaming Zone (web a neskôr Android).
 
@@ -14,7 +14,7 @@ Potom otvor http://localhost:8080. Prehliadač potrebuje internet na načítanie
 
 ## Ovládanie
 
-- Kliknutie alebo dotyk na hracej ploche nastaví smer úderu.
+- **Uchop viditeľné telo tága a ťahaj** pre natočenie okolo bielej gule (myš aj dotyk). Kliknutie pred tágom už nemení smer.
 - Tlačidlá ± posunú smer o 0,25°.
 - Posuvník mení silu úderu, tlačidlo ÚDER alebo medzerník vystrelí.
 - Prepnúť kameru: pohľad zhora / 3D perspektíva.
@@ -24,7 +24,8 @@ Potom otvor http://localhost:8080. Prehliadač potrebuje internet na načítanie
 
 - 3D scéna s deväťstopovým stolom (hracia plocha 2,54 × 1,27 m), 16 guľami a dvoma kamerami.
 - Oddelený lokálny 2D solver pohybu na ploche v SI jednotkách, pevný krok 1/240 s.
-- Guľa–guľa, jednoduchý mantinel, základné pohlcovanie vreciek, spomaľovanie.
+- Guľa–guľa, jednoduchý mantinel, zúžené prototypové pohlcovanie vreciek, spomaľovanie.
+- Gule ostávajú v reálnom priemere 57,15 mm; pohľad kamery je bližší. Vrecká majú menší grafický rozmer (roh 115 mm, stred 128 mm); konečná geometria čeľustí chýba.
 - Cielené použitie: vizuálny a interakčný *physics lab*, nie hotový simulátor.
 
 ## Známe obmedzenia
