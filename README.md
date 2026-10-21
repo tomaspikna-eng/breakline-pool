@@ -1,4 +1,4 @@
-# BREAKLINE POOL — Physics Lab 0.2
+# BREAKLINE POOL — Physics Lab 0.3
 
 Technický 3D prototyp biliardu pre projekt CSP Gaming Zone (web a neskôr Android).
 
@@ -30,7 +30,7 @@ Potom otvor http://localhost:8080. Prehliadač potrebuje internet na načítanie
 
 ## Známe obmedzenia
 
-**Fyzika 0.1 zatiaľ NIE JE kalibrovaná ani úplne realistická.** Chýba angular velocity, šmyk/valenie, topspin/backspin, sidespin, throw, presná geometria gumy/čeľustí vreciek a správne WPA pravidlá. Aktuálna detekcia vreciek je zjednodušená. 3D objekty zobrazujú 2D simuláciu v rovine stola.
+**Fyzika 0.3 zatiaľ NIE JE kalibrovaná ani úplne realistická.** Má experimentálny model šmyku/valenia a orientačné účinky spodného/horného a bočného falšu, ale chýba presná kalibrácia s reálnym stolom, throw, overený model gumy/čeľustí vreciek a správne WPA pravidlá. Aktuálna detekcia vreciek je zjednodušená. 3D objekty zobrazujú 2D simuláciu v rovine stola.
 
 Hra neobsahuje online zápasy, prihlásenie CSP, turnaje, ligy ani platené prvky. Nemá kód ani grafiku konkurenčných hier.
 
@@ -46,3 +46,7 @@ Hra neobsahuje online zápasy, prihlásenie CSP, turnaje, ligy ani platené prvk
 ```sh
 node --test tests/*.test.mjs
 ```
+
+## Distribúcia Pages
+
+Ak má projekt zapnuté GitHub Pages z vetvy `gh-pages`, nasadzovaciu vetvu treba po zmene `main` synchronizovať. Release 0.3 obsahuje cache-busting query parametre pre CSS a JS. Táto dokumentácia netvrdí, že server publikuje najnovší commit; kontrola nasadenia je samostatný krok.
