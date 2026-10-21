@@ -1,10 +1,10 @@
 
-import { SPEC, POCKETS, createRack, strike, step, moving } from './physics.mjs';
+import { SPEC, POCKETS, createRack, strike, step, moving } from './physics.mjs?v=0.3.0';
 
 const B = window.BABYLON;
 const $ = id => document.getElementById(id);
 const canvas = $('game');
-const state = { balls: createRack(8), angle: 0, power: 65, top: true, accumulator: 0, wasMoving: false, drag: null };
+const state = { balls: createRack(8), angle: 0, pull: 0, contact: {x:0,y:0}, top: true, accumulator: 0, wasMoving: false, drag: null };
 const colors = [
   '#eeeee8', '#f4c92f', '#1958a7', '#be2e37', '#673c89',
   '#e9851c', '#24835d', '#8b313a', '#161b20', '#f4c92f',
@@ -180,10 +180,10 @@ function guide() {
   if (!ready) return;
   const dx = Math.cos(state.angle), dz = Math.sin(state.angle);
   const h = SPEC.ballR + .04;
-  const end = V(b.x - dx*1.30,h,b.z - dz*1.30);
-  const start = V(b.x - dx*.075,h,b.z - dz*.075);
+  const end = V(b.x - dx*(1.30+state.pull),h,b.z - dz*(1.30+state.pull));
+  const start = V(b.x - dx*(.075+state.pull),h,b.z - dz*(.075+state.pull));
   cue = B.MeshBuilder.CreateTube('cue',{path:[end,start],radius:.008,tessellation:10,instance:cue},scene);
-  cueHandle.position.set(b.x - dx * .69, h, b.z - dz * .69);
+  cueHandle.position.set(b.x - dx * (.69+state.pull), h, b.z - dz * (.69+state.pull));
   cueHandle.rotation.y = -state.angle;
   aim = B.MeshBuilder.CreateLines('aim',{points:[V(b.x+dx*.05,h,b.z+dz*.05),V(b.x+dx*.86,h,b.z+dz*.86)],instance:aim},scene);
   cue.setEnabled(true);
@@ -202,7 +202,6 @@ function placeBalls() {
 
 function status() {
   const busy = moving(state.balls);
-  $('shoot').disabled = busy || !cueBall();
   if(busy) $('status').textContent = 'Gule sú v pohybe';
   else if(!cueBall()) $('status').textContent = 'Biela potopená · nový rozstrel';
   else $('status').textContent = 'Pripravený na úder';
@@ -212,11 +211,28 @@ function status() {
   }
 }
 
-function shoot() {
-  if(strike(state.balls,state.angle,state.power)){
+function updatePower() {
+  const percent = Math.round(Math.min(1, state.pull / .34) * 100);
+  $('pullFill').style.width = percent + '%';
+  $('pullPower').textContent = percent + ' %';
+}
+function shoot(percent) {
+  if (moving(state.balls) || !cueBall()) return;
+  state.pull = 0;
+  updatePower();
+  if(strike(state.balls,state.angle,percent,state.contact)){
     $('status').textContent = 'Úder vykonaný';
     guide();
   }
+}
+function showContact() {
+  const { x, y } = state.contact;
+  $('spinDot').style.left = (50 + x * 39) + '%';
+  $('spinDot').style.top = (50 - y * 39) + '%';
+  let label = Math.abs(x) < .15 && Math.abs(y) < .15 ? 'STRED'
+    : Math.abs(y) >= Math.abs(x) ? (y > 0 ? 'DOHRÁVKA' : 'SŤAHOVÁK')
+    : (x > 0 ? 'PRAVÝ FALŠ' : 'ĽAVÝ FALŠ');
+  $('spinName').textContent = label;
 }
 function reset() {
   state.balls = createRack((Math.random()*0xffffffff) >>> 0);
@@ -224,6 +240,8 @@ function reset() {
   state.accumulator = 0;
   state.wasMoving = false;
   state.drag = null;
+  state.pull = 0;
+  updatePower();
   placeBalls(); guide(); status();
 }
 function cameraMode() {
@@ -268,7 +286,14 @@ canvas.addEventListener('pointerdown', event => {
   if (!hit?.hit || hit.pickedMesh !== cueHandle) return;
   const startPointerAngle = pointerAngle(event);
   if (startPointerAngle === null) return;
-  state.drag = { id: event.pointerId, aimAtStart: state.angle, pointerAtStart: startPointerAngle };
+  const grab = cuePointer(event);
+  if (!grab) return;
+  state.drag = {
+    id: event.pointerId,
+    aimAtStart: state.angle,
+    pointerAtStart: startPointerAngle,
+    start: grab
+  };
   canvas.setPointerCapture(event.pointerId);
   canvas.style.cursor = 'grabbing';
   event.preventDefault();
@@ -280,6 +305,14 @@ canvas.addEventListener('pointermove', event => {
     if (a === null) return;
     state.angle = wrapAngle(state.drag.aimAtStart +
       wrapAngle(a - state.drag.pointerAtStart));
+    const p = cuePointer(event);
+    if (p) {
+      const dx = Math.cos(state.drag.aimAtStart);
+      const dz = Math.sin(state.drag.aimAtStart);
+      const back = -((p.x-state.drag.start.x)*dx + (p.z-state.drag.start.z)*dz);
+      state.pull = Math.max(0, Math.min(.34, back));
+      updatePower();
+    }
     guide();
     event.preventDefault();
     return;
@@ -293,37 +326,78 @@ canvas.addEventListener('pointermove', event => {
   canvas.style.cursor = hit?.hit ? 'grab' : 'default';
 });
 
-function finishCueDrag(event) {
+function finishCueDrag(event, canceled = false) {
   if (!state.drag || state.drag.id !== event.pointerId) return;
+  // Capture the final pointer position to avoid losing the last input frame.
+  const lastPoint = cuePointer(event);
+  if (lastPoint && !canceled) {
+    const dx = Math.cos(state.drag.aimAtStart), dz = Math.sin(state.drag.aimAtStart);
+    const back = -((lastPoint.x-state.drag.start.x)*dx + (lastPoint.z-state.drag.start.z)*dz);
+    state.pull = Math.max(0,Math.min(.34,back));
+    const angle = pointerAngle(event);
+    if (angle !== null) state.angle = wrapAngle(state.drag.aimAtStart +
+      wrapAngle(angle-state.drag.pointerAtStart));
+  }
+  const percent = Math.min(100,Math.round(state.pull/.34*100));
   state.drag = null;
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   canvas.style.cursor = 'default';
-  guide();
+  state.pull = 0;
+  updatePower();
+  if (!canceled && percent >= 8) shoot(percent);
+  else guide();
 }
-canvas.addEventListener('pointerup', finishCueDrag);
-canvas.addEventListener('pointercancel', finishCueDrag);
+
+canvas.addEventListener('pointerup', event => finishCueDrag(event));
+canvas.addEventListener('pointercancel', event => finishCueDrag(event,true));
 canvas.addEventListener('lostpointercapture', event => {
   if (!state.drag || state.drag.id !== event.pointerId) return;
   state.drag = null;
+  state.pull = 0;
+  updatePower();
   canvas.style.cursor = 'default';
   guide();
 });
-$('minus').addEventListener('click',()=>{state.angle-=Math.PI/720;guide();});
-$('plus').addEventListener('click',()=>{state.angle+=Math.PI/720;guide();});
+const spinPad = $('spinPad');
+function pickSpin(event) {
+  const rect = spinPad.getBoundingClientRect();
+  let x = (event.clientX - (rect.left + rect.width/2)) / (rect.width/2 - 5);
+  let y = - (event.clientY - (rect.top + rect.height/2)) / (rect.height/2 - 5);
+  const radius = Math.hypot(x,y);
+  if (radius > .85) { x *= .85/radius; y *= .85/radius; }
+  state.contact = {x, y};
+  showContact();
+}
+let spinPointerId = null;
+spinPad.addEventListener('pointerdown',event=>{
+  spinPointerId = event.pointerId;
+  spinPad.setPointerCapture(event.pointerId);
+  pickSpin(event);
+  event.preventDefault();
+});
+spinPad.addEventListener('pointermove',event=>{
+  if (spinPointerId !== event.pointerId) return;
+  pickSpin(event);
+  event.preventDefault();
+});
+function endSpin(event){if(spinPointerId===event.pointerId)spinPointerId=null;}
+spinPad.addEventListener('pointerup',endSpin);
+spinPad.addEventListener('pointercancel',endSpin);
+$('spinReset').addEventListener('click',()=>{state.contact={x:0,y:0};showContact();});
 $('camera').addEventListener('click',cameraMode);
 $('rack').addEventListener('click',reset);
-$('shoot').addEventListener('click',shoot);
-$('power').addEventListener('input',e=>{
-  state.power=Number(e.currentTarget.value);
-  $('powerNumber').textContent=state.power;
-});
 $('fullscreen').addEventListener('click',()=>{
   if(document.fullscreenElement) document.exitFullscreen();
   else document.documentElement.requestFullscreen().catch(()=>{});
 });
 window.addEventListener('keydown',e=>{
   if(e.code==='Space' && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLButtonElement)){
-    e.preventDefault(); shoot();
+    e.preventDefault(); shoot(50);
+  }
+  if((e.code==='ArrowLeft'||e.code==='ArrowRight') && !(e.target instanceof HTMLInputElement)){
+    e.preventDefault();
+    state.angle += (e.code==='ArrowLeft' ? -1 : 1)*Math.PI/720;
+    guide();
   }
 });
 window.addEventListener('resize',()=>engine.resize());
@@ -340,5 +414,5 @@ scene.onBeforeRenderObservable.add(()=>{
   placeBalls();
   status();
 });
-placeBalls();guide();status();
+placeBalls();showContact();updatePower();guide();status();
 engine.runRenderLoop(()=>scene.render());
