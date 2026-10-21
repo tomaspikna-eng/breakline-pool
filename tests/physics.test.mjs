@@ -66,3 +66,26 @@ test('pocket preview mouth matches smaller target dimensions', () => {
   assert.ok(corners.every(p => Math.abs(p.r * 2 - .115) < 1e-10));
   assert.ok(sides.every(p => Math.abs(p.r * 2 - .128) < 1e-10));
 });
+
+test('cue contact above/below center produces different post-contact travel', () => {
+  function cueXAfterContact(y) {
+    const balls = [
+      { id:0, x:-.4, z:0, vx:0, vz:0, active:true },
+      { id:1, x:0, z:0, vx:0, vz:0, active:true }
+    ];
+    strike(balls, 0, 45, { x:0, y });
+    for (let n=0; n<380; n++) step(balls);
+    return balls[0].x;
+  }
+  assert.ok(cueXAfterContact(.7) > cueXAfterContact(-.7));
+});
+
+test('side impact changes cushion reflection trajectory', () => {
+  function zAfterBounce(xTip) {
+    const balls = [{id:0,x:1,z:0,vx:0,vz:0,active:true}];
+    strike(balls, 0, 45, {x:xTip,y:0});
+    for(let n=0;n<80;n++) step(balls);
+    return balls[0].z;
+  }
+  assert.ok(Math.abs(zAfterBounce(.6) - zAfterBounce(-.6)) > .0001);
+});
