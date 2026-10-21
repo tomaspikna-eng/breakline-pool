@@ -52,3 +52,17 @@ test('pocket sensor marks ball inactive', () => {
   step(balls);
   assert.equal(balls[0].active,false);
 });
+
+
+test('regulation-sized balls remain unchanged', () => {
+  assert.equal(SPEC.ballR * 2, 0.05715);
+});
+
+test('pocket preview mouth matches smaller target dimensions', () => {
+  const corners = POCKETS.filter(p => Math.abs(p.x) > 0.01);
+  const sides = POCKETS.filter(p => Math.abs(p.x) < 0.01);
+  assert.equal(corners.length, 4);
+  assert.equal(sides.length, 2);
+  assert.ok(corners.every(p => Math.abs(p.r * 2 - .115) < 1e-10));
+  assert.ok(sides.every(p => Math.abs(p.r * 2 - .128) < 1e-10));
+});
