@@ -90,7 +90,7 @@ export function strike(balls, angle, powerPercent, contact = { x: 0, y: 0 }) {
   // Center hit initially slides; high hit follows; low hit draws.
   cue.wx = dz * speed * tipY * 2.3 / R;
   cue.wz = -dx * speed * tipY * 2.3 / R;
-  cue.wy = -tipX * speed * 13 / R;
+  cue.wy = -tipX * speed * 1.6 / R;
   return true;
 }
 
