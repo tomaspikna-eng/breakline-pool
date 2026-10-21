@@ -1,6 +1,6 @@
 
 /**
- * BREAKLINE Physics Lab 0.1
+ * BREAKLINE Physics Lab 0.2
  * This is an intentionally simplified 2D rigid-body prototype in SI units.
  * It is NOT a validated pool simulation (no spin, slip/roll or jaw model yet).
  */
@@ -17,13 +17,15 @@ export const SPEC = Object.freeze({
 
 const { length: L, width: W, ballR: R } = SPEC;
 
+// Prototype sensor radii; real pocket jaws and openings require 3D collision geometry.
+// Corner mouth preview 115 mm, side mouth preview 128 mm.
 export const POCKETS = Object.freeze([
-  { x: -L/2, z: -W/2, r: 0.064 },
-  { x:  0,   z: -W/2, r: 0.070 },
-  { x:  L/2, z: -W/2, r: 0.064 },
-  { x: -L/2, z:  W/2, r: 0.064 },
-  { x:  0,   z:  W/2, r: 0.070 },
-  { x:  L/2, z:  W/2, r: 0.064 }
+  { x: -L/2, z: -W/2, r: 0.0575 },
+  { x:  0,   z: -W/2, r: 0.064 },
+  { x:  L/2, z: -W/2, r: 0.0575 },
+  { x: -L/2, z:  W/2, r: 0.0575 },
+  { x:  0,   z:  W/2, r: 0.064 },
+  { x:  L/2, z:  W/2, r: 0.0575 }
 ]);
 
 function rand(seed) {
