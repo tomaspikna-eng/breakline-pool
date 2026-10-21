@@ -140,7 +140,23 @@ aim.color = new B.Color3(1,.83,.45);
 aim.isPickable = false;
 
 function cueBall(){return state.balls.find(b=>b.id===0 && b.active);}
+function positionCamera() {
+  if (state.top) {
+    camera.alpha = -Math.PI / 2;
+    camera.beta = .08;
+    camera.radius = 3.65;
+    camera.setTarget(V(0, 0, 0));
+    return;
+  }
+  const b = cueBall();
+  const dx = Math.cos(state.angle), dz = Math.sin(state.angle);
+  camera.alpha = Math.atan2(-dz, -dx);
+  camera.beta = 1.15;
+  camera.radius = 2.3;
+  camera.setTarget(V((b?.x ?? 0) + dx * .32, 0, (b?.z ?? 0) + dz * .32));
+}
 function guide() {
+  positionCamera();
   const b = cueBall();
   const ready = !!b && !moving(state.balls);
   cue.setEnabled(ready);
@@ -193,11 +209,9 @@ function reset() {
 }
 function cameraMode() {
   state.top = !state.top;
-  camera.alpha = -Math.PI/2;
-  camera.beta = state.top ? .08 : .95;
-  camera.radius = state.top ? 3.65 : 3.85;
+  positionCamera();
   $('camera').textContent = state.top ? '3D POHĽAD' : 'POHĽAD ZHORA';
-  $('viewLabel').textContent = state.top ? 'Z HORA' : 'OD STOLA';
+  $('viewLabel').textContent = state.top ? 'Z HORA' : 'OD TÁGA';
 }
 
 canvas.addEventListener('pointerdown', () => {
