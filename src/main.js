@@ -4,7 +4,7 @@ import { SPEC, POCKETS, createRack, strike, step, moving } from './physics.mjs';
 const B = window.BABYLON;
 const $ = id => document.getElementById(id);
 const canvas = $('game');
-const state = { balls: createRack(8), angle: 0, power: 65, top: true, accumulator: 0, wasMoving: false };
+const state = { balls: createRack(8), angle: 0, power: 65, top: true, accumulator: 0, wasMoving: false, drag: null };
 const colors = [
   '#eeeee8', '#f4c92f', '#1958a7', '#be2e37', '#673c89',
   '#e9851c', '#24835d', '#8b313a', '#161b20', '#f4c92f',
@@ -20,8 +20,8 @@ const engine = new B.Engine(canvas, true, { antialias: true, stencil: true });
 const scene = new B.Scene(engine);
 scene.clearColor = new B.Color4(0.055, 0.09, 0.11, 1);
 const V = (x, y, z) => new B.Vector3(x, y, z);
-const camera = new B.ArcRotateCamera('camera', -Math.PI/2, 0.08, 3.65, V(0,0,0), scene);
-camera.lowerRadiusLimit = 2;
+const camera = new B.ArcRotateCamera('camera', -Math.PI/2, 0.08, 3.12, V(0,0,0), scene);
+camera.lowerRadiusLimit = 1.8;
 camera.upperRadiusLimit = 7;
 camera.minZ = 0.01;
 camera.fov = 0.57;
@@ -82,7 +82,7 @@ for (const x of [-SPEC.length/2-.034,SPEC.length/2+.034]) {
 }
 for (const p of POCKETS) {
   const mesh = B.MeshBuilder.CreateCylinder('pocket', {
-    diameter: p.r*2.22, height:.015, tessellation:32
+    diameter: p.r * 2, height:.015, tessellation:32
   },scene);
   mesh.position.set(p.x,.035,p.z);
   mesh.material = pocketMat;
@@ -139,12 +139,26 @@ let aim = B.MeshBuilder.CreateLines('aim',{points:[V(0,.07,0),V(.8,.07,0)],updat
 aim.color = new B.Color3(1,.83,.45);
 aim.isPickable = false;
 
+// A generous but nearly invisible hit area along the SHAFT, not ahead of the cue ball.
+// The target follows the same geometry as the visible cue so touch can grab it too.
+const cueHandle = B.MeshBuilder.CreateBox('cue shaft grab area', {
+  width: 1.20, height: .085, depth: .095
+}, scene);
+const gripMaterial = new B.StandardMaterial('transparent grip target', scene);
+gripMaterial.diffuseColor = B.Color3.FromHexString('#d4aa62');
+gripMaterial.alpha = 0.005;
+gripMaterial.disableLighting = true;
+gripMaterial.disableDepthWrite = true;
+cueHandle.material = gripMaterial;
+cueHandle.isPickable = true;
+cueHandle.renderingGroupId = 2;
+
 function cueBall(){return state.balls.find(b=>b.id===0 && b.active);}
 function positionCamera() {
   if (state.top) {
     camera.alpha = -Math.PI / 2;
     camera.beta = .08;
-    camera.radius = 3.65;
+    camera.radius = 3.12;
     camera.setTarget(V(0, 0, 0));
     return;
   }
@@ -152,14 +166,16 @@ function positionCamera() {
   const dx = Math.cos(state.angle), dz = Math.sin(state.angle);
   camera.alpha = Math.atan2(-dz, -dx);
   camera.beta = 1.15;
-  camera.radius = 2.3;
+  camera.radius = 2.08;
   camera.setTarget(V((b?.x ?? 0) + dx * .32, 0, (b?.z ?? 0) + dz * .32));
 }
 function guide() {
-  positionCamera();
+  // Keep the perspective fixed during a drag to prevent pointer-angle feedback.
+  if (!state.drag) positionCamera();
   const b = cueBall();
   const ready = !!b && !moving(state.balls);
   cue.setEnabled(ready);
+  cueHandle.setEnabled(ready);
   aim.setEnabled(ready);
   if (!ready) return;
   const dx = Math.cos(state.angle), dz = Math.sin(state.angle);
@@ -167,6 +183,8 @@ function guide() {
   const end = V(b.x - dx*1.30,h,b.z - dz*1.30);
   const start = V(b.x - dx*.075,h,b.z - dz*.075);
   cue = B.MeshBuilder.CreateTube('cue',{path:[end,start],radius:.008,tessellation:10,instance:cue},scene);
+  cueHandle.position.set(b.x - dx * .69, h, b.z - dz * .69);
+  cueHandle.rotation.y = -state.angle;
   aim = B.MeshBuilder.CreateLines('aim',{points:[V(b.x+dx*.05,h,b.z+dz*.05),V(b.x+dx*.86,h,b.z+dz*.86)],instance:aim},scene);
   cue.setEnabled(true);
   aim.setEnabled(true);
@@ -205,6 +223,7 @@ function reset() {
   state.angle = 0;
   state.accumulator = 0;
   state.wasMoving = false;
+  state.drag = null;
   placeBalls(); guide(); status();
 }
 function cameraMode() {
@@ -214,15 +233,79 @@ function cameraMode() {
   $('viewLabel').textContent = state.top ? 'Z HORA' : 'OD TÁGA';
 }
 
-canvas.addEventListener('pointerdown', () => {
-  if(moving(state.balls) || !cueBall()) return;
-  const hit = scene.pick(scene.pointerX,scene.pointerY,m=>m === felt);
-  if(!hit?.hit || !hit.pickedPoint) return;
-  const p = hit.pickedPoint;
-  const cueBallNow = cueBall();
-  const dx=p.x-cueBallNow.x, dz=p.z-cueBallNow.z;
-  if(Math.hypot(dx,dz)<.04) return;
-  state.angle = Math.atan2(dz,dx);
+// Babylon scene.pick expects canvas-local CSS coordinates, not device pixels.
+function canvasCoords(event) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+}
+
+function cuePointer(event) {
+  const {x, y} = canvasCoords(event);
+  const ray = scene.createPickingRay(x, y, B.Matrix.Identity(), camera);
+  const h = SPEC.ballR + .04;
+  if (!ray || Math.abs(ray.direction.y) < 1e-6) return null;
+  const t = (h - ray.origin.y) / ray.direction.y;
+  if (t <= 0) return null;
+  return ray.origin.add(ray.direction.scale(t));
+}
+
+function pointerAngle(event) {
+  const p = cuePointer(event), b = cueBall();
+  if (!p || !b) return null;
+  const dx = b.x - p.x, dz = b.z - p.z;
+  if (Math.hypot(dx, dz) < .08) return null;
+  return Math.atan2(dz, dx);
+}
+
+function wrapAngle(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+canvas.addEventListener('pointerdown', event => {
+  if (state.drag || moving(state.balls) || !cueBall()) return;
+  const {x, y} = canvasCoords(event);
+  const hit = scene.pick(x, y, mesh => mesh === cueHandle);
+  if (!hit?.hit || hit.pickedMesh !== cueHandle) return;
+  const startPointerAngle = pointerAngle(event);
+  if (startPointerAngle === null) return;
+  state.drag = { id: event.pointerId, aimAtStart: state.angle, pointerAtStart: startPointerAngle };
+  canvas.setPointerCapture(event.pointerId);
+  canvas.style.cursor = 'grabbing';
+  event.preventDefault();
+});
+
+canvas.addEventListener('pointermove', event => {
+  if (state.drag && state.drag.id === event.pointerId) {
+    const a = pointerAngle(event);
+    if (a === null) return;
+    state.angle = wrapAngle(state.drag.aimAtStart +
+      wrapAngle(a - state.drag.pointerAtStart));
+    guide();
+    event.preventDefault();
+    return;
+  }
+  if (moving(state.balls) || !cueBall()) {
+    canvas.style.cursor = 'default';
+    return;
+  }
+  const {x, y} = canvasCoords(event);
+  const hit = scene.pick(x, y, mesh => mesh === cueHandle);
+  canvas.style.cursor = hit?.hit ? 'grab' : 'default';
+});
+
+function finishCueDrag(event) {
+  if (!state.drag || state.drag.id !== event.pointerId) return;
+  state.drag = null;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  canvas.style.cursor = 'default';
+  guide();
+}
+canvas.addEventListener('pointerup', finishCueDrag);
+canvas.addEventListener('pointercancel', finishCueDrag);
+canvas.addEventListener('lostpointercapture', event => {
+  if (!state.drag || state.drag.id !== event.pointerId) return;
+  state.drag = null;
+  canvas.style.cursor = 'default';
   guide();
 });
 $('minus').addEventListener('click',()=>{state.angle-=Math.PI/720;guide();});
